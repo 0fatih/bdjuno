@@ -6,9 +6,12 @@ import (
 
 	"github.com/cometbft/cometbft/libs/log"
 
-	"cosmossdk.io/simapp"
 	"cosmossdk.io/simapp/params"
 	"github.com/forbole/juno/v5/node/remote"
+
+	wasmapp "github.com/CosmWasm/wasmd/app"
+	"github.com/CosmWasm/wasmd/x/wasm"
+	wasmkeeper "github.com/CosmWasm/wasmd/x/wasm/keeper"
 
 	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
 	distrtypes "github.com/cosmos/cosmos-sdk/x/distribution/types"
@@ -39,6 +42,9 @@ import (
 	stakingsource "github.com/forbole/bdjuno/v5/modules/staking/source"
 	localstakingsource "github.com/forbole/bdjuno/v5/modules/staking/source/local"
 	remotestakingsource "github.com/forbole/bdjuno/v5/modules/staking/source/remote"
+
+	wasmsource "github.com/forbole/bdjuno/v5/modules/wasm/source"
+	localwasmsource "github.com/forbole/bdjuno/v5/modules/wasm/source/local"
 )
 
 type Sources struct {
@@ -48,6 +54,7 @@ type Sources struct {
 	MintSource     mintsource.Source
 	SlashingSource slashingsource.Source
 	StakingSource  stakingsource.Source
+	WasmSource     wasmsource.Source
 }
 
 func BuildSources(nodeCfg nodeconfig.Config, encodingConfig *params.EncodingConfig) (*Sources, error) {
@@ -68,9 +75,11 @@ func buildLocalSources(cfg *local.Details, encodingConfig *params.EncodingConfig
 		return nil, err
 	}
 
-	app := simapp.NewSimApp(
-		log.NewTMLogger(log.NewSyncWriter(os.Stdout)), source.StoreDB, nil, true, nil, nil,
-	)
+	app := wasmapp.NewWasmApp(log.NewTMLogger(log.NewSyncWriter(os.Stdout)), source.StoreDB, nil, true, wasm.EnableAllProposals, nil, nil)
+
+	// app := simapp.NewSimApp(
+	// 	log.NewTMLogger(log.NewSyncWriter(os.Stdout)), source.StoreDB, nil, true, nil, nil,
+	// )
 
 	sources := &Sources{
 		BankSource: localbanksource.NewSource(source, banktypes.QueryServer(app.BankKeeper)),
@@ -79,6 +88,7 @@ func buildLocalSources(cfg *local.Details, encodingConfig *params.EncodingConfig
 		MintSource:     localmintsource.NewSource(source, minttypes.QueryServer(app.MintKeeper)),
 		SlashingSource: localslashingsource.NewSource(source, slashingtypes.QueryServer(app.SlashingKeeper)),
 		StakingSource:  localstakingsource.NewSource(source, stakingkeeper.Querier{Keeper: app.StakingKeeper}),
+		WasmSource:     localwasmsource.NewSource(source, wasmkeeper.Querier(&app.WasmKeeper)),
 	}
 
 	// Mount and initialize the stores
